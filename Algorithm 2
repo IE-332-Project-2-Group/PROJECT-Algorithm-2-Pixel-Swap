@@ -1,28 +1,98 @@
-library(imager)
+#Nicholas Alfano and Andrew Newquist 
 
-#Load in image from desktop 
+#Algorithm 2: Pixel swapping
+#This algorithm changes its' share of the 1% budget of the images pixels by 
+#selecting two random pixels
+#in an image and swapping them 
 
-setwd("~/Desktop/IE332")
+library(tidyverse)
+library(keras)
+library(tensorflow)
+library(reticulate)
+library(png)
 
-lawn <- load.image("Grass.jpeg")
+setwd("~/Desktop/Project")
+model_list <- load_model_tf("./dandelion_model/")
+model <- model_list
 
-mask <- array(1, dim(lawn))
-mask[100:200] <- 0
+#Set target image size
+target_size <- c(224, 224)
 
-masked_img <- lawn * mask
+#Create Data Frame
+res <- data.frame(file = character(), class = character(), percent_dandelion = numeric(), percent_dandelions = numeric(), stringsAsFactors = FALSE)
 
-plot(masked_img)
-
-dims <- dim(lawn)
-
-n_pixels <- prod(dims)
-new_vec <- sample.int(n_pixels)
-
-shuffled_num <- function(x, new_vec) {
-  x[new_vec]
+f <- list.files("./grass")
+for (i in f) {
+  
+  #Load image as Keras tensor object
+  test_image <- image_load(paste("./grass/", i, sep = ""), target_size = target_size)
+  
+  #Convert Keras tensor object to  array
+  test_array <- image_to_array(test_image)
+  
+  #Assign Budget
+  test_array <- array_reshape(test_array, c(1, dim(test_array)))
+  test_array <- test_array / 255
+  pixel_num <- 224 * 224
+  budget <- round(pixel_num * 0.01)
+  
+  #
+  ##THIS IS WHERE THE UNIQUE ALGORITHM 2 (First implementation) BEGINS_________
+  
+  #Swap Random pixels around in the image
+  swap_indices <- sample(length(test_array), budget)
+  test_array[swap_indices] <- sample(test_array[setdiff(seq_along(test_array), swap_indices)], budget)
+  
+  pred <- model %>% predict(test_array)
+  
+  ##THIS IS WHERE THE UNIQUE ALGORITHM 2 (First implementation) ENDS___________
+  #
+  
+  # Record results in Res
+  if (pred[1,2] < 0.50){
+    res <- rbind(res, data.frame(file = i, class = "not_grass", percent_dandelion = pred[1,1], percent_grass = 1- pred[1,1]))
+  } else {
+    res <- rbind(res, data.frame(file = i, class = "grass", percent_dandelion = pred[1,1], percent_grass = 1 - pred[1,1]))
+  }
 }
 
-shuffled_lawn <- apply(lawn, c(1,2), shuffled_num, new_vec = new_vec)
 
-shuffled_lawn <- array(shuffled_lawn, dim = dims)
-plot(shuffled_lawn)
+f <- list.files("./dandelions")
+for (i in f) {
+  
+  # Load image as Keras tensor object
+  test_image <- image_load(paste("./dandelions/", i, sep = ""), target_size = target_size)
+  
+  #Convert Keras tensor object to  array
+  test_array <- image_to_array(test_image)
+  
+  #Assign Budget
+  test_array <- array_reshape(test_array, c(1, dim(test_array)))
+  test_array <- test_array / 255
+  pixel_num <- 224 * 224
+  budget <- round(pixel_num * 0.01)
+  
+  #Generate random pixel indices
+  pixel_indices <- sample(pixel_num, budget, replace = FALSE)
+  
+  #
+  ##THIS IS WHERE THE UNIQUE ALGORITHM 2 (Second implementation) BEGINS_________
+  
+  #Swap Random pixels around in the image
+  swap_indices <- sample(length(test_array), budget)
+  test_array[swap_indices] <- sample(test_array[setdiff(seq_along(test_array), swap_indices)], budget)
+  
+  pred <- model %>% predict(test_array)
+  
+  ##THIS IS WHERE THE UNIQUE ALGORITHM 2 (Second implementation) ENDS___________
+  #
+  
+  #Record results in Res
+  if (pred[1,1] < 0.50){
+    res <- rbind(res, data.frame(file = i, class = "not_dandelion", percent_dandelion = pred[1,1], percent_grass = 1 - pred[1,1]))
+  } else {
+    res <- rbind(res, data.frame(file = i, class = "dandelion", percent_dandelion = pred[1,1], percent_grass = 1 - pred[1,1]))
+  }
+}
+print(res)
+View(res)
